@@ -1,0 +1,18 @@
+build/
+.gradle/
+out/
+*.class
+data/*.mv.db
+data/*.trace.db
+submission/
+.idea/
+*.iml
+.DS_Store
+# Java / JVM crash logs
+hs_err_pid*.log
+replay_pid*.log
+
+# Build output
+build/
+bin/
+.gradle/
