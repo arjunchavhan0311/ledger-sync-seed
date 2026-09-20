@@ -2,31 +2,19 @@ package in.simplifymoney.ledgersync;
 
 import in.simplifymoney.ledgersync.ingest.IngestService;
 import in.simplifymoney.ledgersync.json.Json;
+import in.simplifymoney.ledgersync.model.NormalizedTxn;
 import in.simplifymoney.ledgersync.parse.Parsers;
 import in.simplifymoney.ledgersync.report.Reports;
 import in.simplifymoney.ledgersync.store.SqlLedgerStore;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
-/**
- * Command line entry point.
- *
- * Commands:
- *
- *   migrate
- *       Apply db/migration/*.sql
- *
- *   ingest <corpus.jsonl>
- *       Read a JSONL corpus and normalize transactions into the SQL ledger.
- *
- *   report <out-dir>
- *       Write:
- *         ledger.json
- *         summary.json
- *         reconciliation.json
- */
 public final class App {
 
     private static final Path DB =
@@ -35,9 +23,7 @@ public final class App {
     private static final Path MIGRATIONS =
             Path.of("db", "migration");
 
-    private App() {
-        // Utility class.
-    }
+    private App() {}
 
     public static void main(String[] args) throws Exception {
 
@@ -64,8 +50,7 @@ public final class App {
             }
 
             default -> {
-                System.err.println(
-                        "unknown command: " + args[0]);
+                System.err.println("unknown command: " + args[0]);
                 usage();
                 System.exit(2);
             }
@@ -84,7 +69,7 @@ public final class App {
         }
     }
 
-    private static void ingest(Path corpus) throws Exception { 
+    private static void ingest(Path corpus) throws Exception {
 
         if (!Files.exists(corpus)) {
             throw new IllegalArgumentException(
@@ -106,7 +91,8 @@ public final class App {
                             new Parsers(),
                             store);
 
-            IngestService.Stats stats = service.ingestFile(corpus);
+            IngestService.Stats stats =
+                    service.ingestFile(corpus);
 
             System.out.println(stats);
             System.out.println(
@@ -122,7 +108,11 @@ public final class App {
         try (SqlLedgerStore store =
                      new SqlLedgerStore(DB)) {
 
-            var ledger = store.all();
+            /*
+             * SQL intentionally contains legacy duplicate rows.
+             * The report must contain one entry per real transaction.
+             */
+            var ledger = deduplicateForReport(store.all());
 
             Files.writeString(
                     outputDirectory.resolve("ledger.json"),
@@ -146,6 +136,41 @@ public final class App {
                     "wrote 3 files to "
                             + outputDirectory);
         }
+    }
+
+    private static java.util.List<NormalizedTxn> deduplicateForReport(
+            java.util.List<NormalizedTxn> rows) {
+
+        Map<String, NormalizedTxn> unique =
+                new LinkedHashMap<>();
+
+        for (NormalizedTxn txn : rows) {
+
+            String key =
+                    txn.accountLast4()
+                            + "|"
+                            + txn.occurredAt().toInstant()
+                            + "|"
+                            + txn.direction()
+                            + "|"
+                            + txn.amount().setScale(2)
+                            + "|"
+                            + normalize(txn.merchant())
+                            + "|"
+                            + txn.category();
+
+            unique.putIfAbsent(key, txn);
+        }
+
+        return new java.util.ArrayList<>(unique.values());
+    }
+
+    private static String normalize(String value) {
+        return value == null
+                ? ""
+                : value.trim()
+                        .replaceAll("\\s+", " ")
+                        .toUpperCase();
     }
 
     private static void requireArguments(
