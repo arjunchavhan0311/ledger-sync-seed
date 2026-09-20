@@ -70,23 +70,6 @@ public final class SelfCheck {
                     running.toPlainString(), closing.toPlainString(),
                     running.subtract(closing).toPlainString());
         }
-        System.out.println("\nDEBUG 4821 TRANSACTIONS");
-
-for (NormalizedTxn t : ledger) {
-    if (!"4821".equals(t.accountLast4())) {
-        continue;
-    }
-
-    System.out.printf(
-            "%s | %-6s | %10s | %-8s | %s%n",
-            t.occurredAt(),
-            t.direction(),
-            t.amount().toPlainString(),
-            t.category(),
-            t.merchant()
-    );
-}
-
         System.out.println("\nThis is the starting point, not the finish line.");
     }
 }
